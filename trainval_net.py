@@ -34,7 +34,8 @@ def parse_args():
     parser.add_argument('--dataset', dest='dataset',
                         help='training dataset',
                         default='pascal_voc', type=str)
-    parser.add_argument('--arch', dest='arch', default='rcnn', choices=['rcnn', 'rfcn', 'couplenet'])
+    parser.add_argument('--arch', dest='arch', default='rcnn',
+                        choices=['rcnn', 'rfcn', 'couplenet', 'chexnet'])
     parser.add_argument('--net', dest='net',
                         help='vgg16, res101',
                         default='vgg16', type=str)
@@ -158,6 +159,8 @@ if __name__ == '__main__':
         from model.rfcn.resnet_atrous import resnet
     elif args.arch == 'couplenet':
         from model.couplenet.resnet_atrous import resnet
+    elif args.arch == 'chexnet':
+        from model.chexnet.densenet import chexnet
 
     # Import ROI functions as per dataset
     if args.dataset == 'kaggle_pna':
@@ -284,6 +287,8 @@ if __name__ == '__main__':
         model = resnet(imdb.classes, 101, pretrained=True, class_agnostic=args.class_agnostic)
     elif args.net == 'res152':
         model = resnet(imdb.classes, 152, pretrained=True, class_agnostic=args.class_agnostic)
+    elif args.net == 'chex121':
+        model = chexnet(imdb.classes, 121, pretrained=True, class_agnostic=args.class_agnostic)
     else:
         print("network is not defined")
         pdb.set_trace()
