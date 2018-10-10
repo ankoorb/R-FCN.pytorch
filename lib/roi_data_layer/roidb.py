@@ -19,7 +19,16 @@ def prepare_roidb(imdb):
   """
 
   roidb = imdb.roidb
+  #print("image_index: ", imdb.image_index)
   if not (imdb.name.startswith('coco')):
+    # s = [(PIL.Image.open(imdb.image_path_at(i)).size, i) for i in range(10)]
+    # print('s: ', s)
+    # t = [(i, imdb.image_index[i]) for i in range(10)]
+    # print('t: ', t)
+    # u = [imdb.image_id_at(i) for i in range(10)]
+    # print('u: ', u)
+    # v = [(i, imdb.image_path_at(i)) for i in range(10)]
+    # print('v: ', v)
     sizes = [PIL.Image.open(imdb.image_path_at(i)).size
          for i in range(imdb.num_images)]
          

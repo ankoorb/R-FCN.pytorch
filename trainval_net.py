@@ -21,7 +21,9 @@ from torch.autograd import Variable
 from torch.utils.data.sampler import Sampler
 
 from model.utils.config import cfg, cfg_from_file, cfg_from_list
-from model.utils.net_utils import adjust_learning_rate, save_checkpoint, clip_gradient
+from model.utils.net_utils import adjust_learning_rate, save_checkpoint, clip_gradient, apply_augmentations
+
+import pickle
 
 
 def parse_args():
@@ -188,7 +190,7 @@ if __name__ == '__main__':
     elif args.dataset == "kaggle_pna":
         args.imdb_name = "pna_2018_trainval"
         args.imdbval_name = "pna_2018_test"
-        args.set_cfgs = ['ANCHOR_SCALES', str(scales), 'ANCHOR_RATIOS', '[0.5,1,2]', 'MAX_NUM_GT_BOXES', '30']
+        args.set_cfgs = ['ANCHOR_SCALES', str(scales), 'ANCHOR_RATIOS', '[0.5,1,2]', 'MAX_NUM_GT_BOXES', '10']
 
     elif args.dataset == "pascal_voc_0712":
         args.imdb_name = "voc_2007_trainval+voc_2012_trainval"
@@ -355,10 +357,17 @@ if __name__ == '__main__':
         data_iter = iter(dataloader)
         for step in range(iters_per_epoch):
             data = next(data_iter)
-            im_data.data.resize_(data[0].size()).copy_(data[0])
+
+            # Apply augmentations
+            aug_img_tensors, aug_bbox_tensors = apply_augmentations(data[0], data[2])
+
+            #im_data.data.resize_(data[0].size()).copy_(data[0])
+            im_data.data.resize_(aug_img_tensors.size()).copy_(aug_img_tensors)
             im_info.data.resize_(data[1].size()).copy_(data[1])
-            gt_boxes.data.resize_(data[2].size()).copy_(data[2])
+            #gt_boxes.data.resize_(data[2].size()).copy_(data[2])
+            gt_boxes.data.resize_(aug_bbox_tensors.size()).copy_(aug_bbox_tensors)
             num_boxes.data.resize_(data[3].size()).copy_(data[3])
+
 
             # Compute multi-task loss
             model.zero_grad()

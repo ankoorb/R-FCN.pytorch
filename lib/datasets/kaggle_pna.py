@@ -32,9 +32,11 @@ class kaggle_pna(imdb):
         self._data_path = self._devkit_path
         # TODO: Change _classes for binary
         self._classes = ('__background__',  # background - always index 0
-                         'no lung opacity / not normal',
+                         # 'no lung opacity / not normal',
+                         # 'normal',
+                         # 'lung opacity')
                          'normal',
-                         'lung opacity')
+                         'opacity')
         self._class_to_ind = dict(zip(self.classes, xrange(self.num_classes)))
         self._image_ext = '.dcm'
         self._image_index = self._load_image_set_index()
@@ -160,7 +162,7 @@ class kaggle_pna(imdb):
             boxes[ix, :] = [x1, y1, x2, y2]
 
             ishards[ix] = 0  # Difficult is set as 0 as no information available
-            cls = self._class_to_ind[obj['class'].lower()]  # TODO: Change here for binary
+            cls = self._class_to_ind[obj['category'].lower()]  # TODO: Change here for binary "class"
             gt_classes[ix] = cls
             overlaps[ix, cls] = 1.0  # TODO: Check if 0.0 makes any difference, check pascal data xml
             seg_areas[ix] = 0.0
@@ -179,32 +181,32 @@ class kaggle_pna(imdb):
                    else self._comp_id)
         return comp_id
 
-    def _get_pna_results_file_template(self):
-        # PNAdevkit/results/PNA2018/<comp_id>_det_test_normal.txt
-        filename = self._get_comp_id() + '_det_' + self._image_set + '_{:s}.txt'
-        filedir = os.path.join(self._devkit_path, 'results', 'PNA' + self._year)
-        if not os.path.exists(filedir):
-            os.makedirs(filedir)
-        path = os.path.join(filedir, filename)
-        return path
-
-    def _write_pna_results_file(self, all_boxes):
-        for cls_idx, cls in enumerate(self.classes):
-            if cls == '__background__':
-                continue
-            print('Writing "{}" PNA results file'.format(cls))
-            filename = self._get_pna_results_file_template().format(cls)
-            with open(filename, 'wt') as f:
-                for im_idx, index in enumerate(self.image_index):
-                    dets = all_boxes[cls_idx][im_idx]
-                    if dets == []:
-                        continue
-                    for k in range(dets.shape[0]):
-                        f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
-                                format(index, dets[k, -1],  # prob
-                                       dets[k, 0], dets[k, 1],  # x, y
-                                       dets[k, 2] - dets[k, 0],  # width
-                                       dets[k, 3] - dets[k, 1]))  # height
+    # def _get_pna_results_file_template(self):
+    #     # PNAdevkit/results/PNA2018/<comp_id>_det_test_normal.txt
+    #     filename = self._get_comp_id() + '_det_' + self._image_set + '_{:s}.txt'
+    #     filedir = os.path.join(self._devkit_path, 'results', 'PNA' + self._year)
+    #     if not os.path.exists(filedir):
+    #         os.makedirs(filedir)
+    #     path = os.path.join(filedir, filename)
+    #     return path
+    #
+    # def _write_pna_results_file(self, all_boxes):
+    #     for cls_idx, cls in enumerate(self.classes):
+    #         if cls == '__background__':
+    #             continue
+    #         print('Writing "{}" PNA results file'.format(cls))
+    #         filename = self._get_pna_results_file_template().format(cls)
+    #         with open(filename, 'wt') as f:
+    #             for im_idx, index in enumerate(self.image_index):
+    #                 dets = all_boxes[cls_idx][im_idx]
+    #                 if dets == []:
+    #                     continue
+    #                 for k in range(dets.shape[0]):
+    #                     f.write('{:s} {:.3f} {:.1f} {:.1f} {:.1f} {:.1f}\n'.
+    #                             format(index, dets[k, -1],  # prob
+    #                                    dets[k, 0], dets[k, 1],  # x, y
+    #                                    dets[k, 2] - dets[k, 0],  # width
+    #                                    dets[k, 3] - dets[k, 1]))  # height
 
     # def _get_kaggle_submission_file_template(self):
     #     # PNAdevkit/results/PNA2018/<comp_id>_det_test_normal.txt
@@ -255,6 +257,92 @@ class kaggle_pna(imdb):
     def competition_mode(self, on):
         if on:
             self.config['mode'] = "test"
+
+# --------------------------------------------------------------------------------
+# Kaggle Metrics
+# --------------------------------------------------------------------------------
+
+"""
+Function to calculate competition metric. Primarily 
+from: https://www.kaggle.com/maxjeblick/keras-competition-metric-for-segmentation
+"""
+
+
+def iou_bbox(box1, box2):
+
+    # Notation for Vij, is that V refers to the direction and i notes the bounding
+    # box and j=1 refers to the smaller value and j=2 refers to the larger value.
+    x11, y11, w1, h1 = box1
+    x21, y21, w2, h2 = box2
+    assert w1 * h1 > 0
+    assert w2 * h2 > 0
+    x12, y12 = x11 + w1, y11 + h1
+    x22, y22 = x21 + w2, y21 + h2
+
+    area1, area2 = w1 * h1, w2 * h2
+
+    # In this case, in the notation, `i` refers to the intercept coordinates
+    xi1, yi1, xi2, yi2 = max([x11, x21]), max([y11, y21]), min([x12, x22]), min([y12, y22])
+
+    if xi2 <= xi1 or yi2 <= yi1:
+        return 0
+    else:
+        intersect = float((xi2 - xi1) * (yi2 - yi1))
+        union = area1 + area2 - intersect
+        return intersect / union
+
+
+def map_iou(boxes_true, boxes_pred, thresholds=(0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75)):
+    """
+    Mean average precision at different intersection over union (IoU) threshold
+     input:
+        boxes_true: Nx4 numpy array of ground true bounding boxes of one image. bbox format: (x1, y1, w, h), where
+                    (x1,y2) are the upper left corner of the bounding box
+        boxes_pred: Nx4 numpy array of predicted bounding boxes of one image. bbox format: (x1, y1, w, h), where
+                    (x1,y2) are the upper left corner of the bounding box
+        thresholds: IoU thresholds to evaluate mean average precision on
+    output:
+        map: mean average precision of the image
+    """
+    # According to the introduction, images with no ground truth bboxes will not be
+    # included in the map score unless there is a false positive detection
+    # reference available here: https://www.kaggle.com/c/rsna-pneumonia-detection-challenge/discussion/64270
+    # return np.nan if both are empty, don't count the image in final evaluation
+    if len(boxes_true) == 0 and len(boxes_pred) == 0:
+        return np.nan
+    map_total = 0
+
+    # loop over thresholds
+    for t in thresholds:
+        matched_bt = set()
+        tp, fn = 0, 0
+        for i, bt in enumerate(boxes_true):
+            matched = False
+            for j, bp in enumerate(boxes_pred):
+                miou = iou_bbox(bt, bp)
+                if miou >= t and not matched and j not in matched_bt:
+                    matched = True
+                    tp += 1  # bt is matched for the first time, count as TP
+                    matched_bt.add(j)
+            if not matched:
+                fn += 1  # bt has no match, count as FN
+        fp = len(boxes_pred) - len(matched_bt)  # FP is the bp that not matched to any bt
+        m = tp / float(tp + fn + fp)
+        map_total += m
+    return map_total / len(thresholds)
+
+
+def competition_metric(y_true_bboxes, y_pred_bboxes):
+    """
+    Mean MAP over all images.
+     input:
+        y_true_bboxes: List of gt bounding boxes for all images (the bounding box gts for each image are a sublist)
+        y_pred_bboxes: List of pred bounding boxes for all images (the bounding box preds for each image are a sublist)
+    output:
+        mean_map: Mean MAP over all images.
+    """
+    return np.nanmean([map_iou(box_true, box_pred) for box_true, box_pred in zip(y_true_bboxes, y_pred_bboxes)])
+
 
 
 if __name__ == '__main__':

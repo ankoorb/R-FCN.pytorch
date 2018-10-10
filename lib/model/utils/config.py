@@ -90,7 +90,7 @@ __C.TRAIN.BG_THRESH_HI = 0.5
 __C.TRAIN.BG_THRESH_LO = 0.1
 
 # Use horizontally-flipped images during training?
-__C.TRAIN.USE_FLIPPED = True
+__C.TRAIN.USE_FLIPPED = False
 
 # Train bounding-box regressors
 __C.TRAIN.BBOX_REG = True
@@ -289,7 +289,7 @@ __C.POOLING_MODE = 'crop'
 __C.POOLING_SIZE = 7
 
 # Maximal number of gt rois in an image during Training
-__C.MAX_NUM_GT_BOXES = 20
+__C.MAX_NUM_GT_BOXES = 30
 
 # Anchor scales for RPN
 __C.ANCHOR_SCALES = [8,16,32]
