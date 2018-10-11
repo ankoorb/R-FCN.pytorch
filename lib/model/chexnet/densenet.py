@@ -255,8 +255,6 @@ class chexnet(ChexNet):
         self.RCNN_base = nn.Sequential(
             densenet.features.conv0,
             densenet.features.norm0,
-            # densenet.features.relu0,
-            # densenet.features.pool0,
             densenet.features.denseblock1,
             densenet.features.transition1,
             densenet.features.denseblock2,
@@ -287,17 +285,34 @@ class chexnet(ChexNet):
                                        out_channels=self.n_classes * cfg.POOLING_SIZE * cfg.POOLING_SIZE,
                                        kernel_size=1, stride=1, padding=0, bias=False)
 
-        # Fix blocks
-        for p in self.RCNN_base[0].parameters(): p.requires_grad = False
-        for p in self.RCNN_base[1].parameters(): p.requires_grad = False
+        for p in self.RCNN_base[0].parameters(): p.requires_grad = False  # Conv2D
+        for p in self.RCNN_base[1].parameters(): p.requires_grad = False  # BatchNorm2d
+        for p in self.RCNN_base[3].parameters(): p.requires_grad = False  # Transition
+        for p in self.RCNN_base[4].parameters(): p.requires_grad = False  # DenseBlock
+        for p in self.RCNN_base[5].parameters(): p.requires_grad = False  # Transition
+        for p in self.RCNN_base[6].parameters(): p.requires_grad = False  # DenseBlock
+        for p in self.RCNN_base[7].parameters(): p.requires_grad = False  # Transition
+        for p in self.RCNN_base[8].parameters(): p.requires_grad = False  # DenseBlock
+        for p in self.RCNN_base[9].parameters(): p.requires_grad = False  # BatchNorm2d
 
-        assert (0 <= cfg.RESNET.FIXED_BLOCKS < 4)
-        if cfg.RESNET.FIXED_BLOCKS >= 3:
-            for p in self.RCNN_base[6].parameters(): p.requires_grad = False
-        if cfg.RESNET.FIXED_BLOCKS >= 2:
-            for p in self.RCNN_base[5].parameters(): p.requires_grad = False
-        if cfg.RESNET.FIXED_BLOCKS >= 1:
-            for p in self.RCNN_base[4].parameters(): p.requires_grad = False
+        # # Check requires_grad value -> Check successful!
+        # print('DenseBlock-2')
+        # for p in self.RCNN_base[6].parameters(): print(p.requires_grad)
+        # print('BatchNorm-5')
+        # for p in self.RCNN_base[9].parameters(): print(p.requires_grad)
+
+
+        # # Fix blocks
+        # for p in self.RCNN_base[0].parameters(): p.requires_grad = False
+        # for p in self.RCNN_base[1].parameters(): p.requires_grad = False
+        #
+        # assert (0 <= cfg.RESNET.FIXED_BLOCKS < 4)
+        # if cfg.RESNET.FIXED_BLOCKS >= 3:
+        #     for p in self.RCNN_base[6].parameters(): p.requires_grad = False
+        # if cfg.RESNET.FIXED_BLOCKS >= 2:
+        #     for p in self.RCNN_base[5].parameters(): p.requires_grad = False
+        # if cfg.RESNET.FIXED_BLOCKS >= 1:
+        #     for p in self.RCNN_base[4].parameters(): p.requires_grad = False
 
         def set_bn_fix(m):
             classname = m.__class__.__name__
