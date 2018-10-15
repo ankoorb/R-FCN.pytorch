@@ -531,27 +531,85 @@ class RandomTranslate(object):
         return img, bboxes
 
 
+# class RandomRotate(object):
+#     """
+#     Randomly rotates an image. Bounding boxes which have an area of less than 25% in the remaining
+#     in the transformed image is dropped. The resolution is maintained, and the remaining area if any
+#     is filled by black color.
+#
+#     angle: float or tuple(float). If float, the image is rotated by a factor drawn randomly from a
+#         range (-angle, angle). If tuple, the angle is drawn randomly from values specified by the tuple
+#     """
+#
+#     def __init__(self, angle=15):
+#         self.angle = angle
+#
+#         if type(self.angle) == tuple:
+#             assert len(self.angle) == 2, "Invalid range"
+#         else:
+#             self.angle = (-self.angle, self.angle)
+#
+#     def __call__(self, img, bboxes):
+#
+#         angle = random.uniform(*self.angle)
+#
+#         w, h = img.shape[1], img.shape[0]
+#         cx, cy = w // 2, h // 2
+#
+#         img = rotate_img(img, angle)
+#
+#         corners = get_corners(bboxes)
+#
+#         corners = np.hstack((corners, bboxes[:, 4:]))
+#
+#         corners[:, :8] = rotate_box(corners[:, :8], angle, cx, cy, h, w)
+#
+#         new_bbox = create_enclosing_box(corners)
+#
+#         scale_factor_x = img.shape[1] / w
+#
+#         scale_factor_y = img.shape[0] / h
+#
+#         img = cv2.resize(img, (w, h))
+#
+#         new_bbox[:, :4] /= [scale_factor_x, scale_factor_y, scale_factor_x, scale_factor_y]
+#
+#         bboxes = new_bbox
+#
+#         bboxes = clip_box(bboxes, [0, 0, w, h])
+#         bboxes = bboxes.clip(min=0)
+#
+#         return img, bboxes
+
+
 class RandomRotate(object):
     """
-    Randomly rotates an image. Bounding boxes which have an area of less than 25% in the remaining 
-    in the transformed image is dropped. The resolution is maintained, and the remaining area if any 
+    Randomly rotates an image. Bounding boxes which have an area of less than 25% in the remaining
+    in the transformed image is dropped. The resolution is maintained, and the remaining area if any
     is filled by black color.
 
-    angle: float or tuple(float). If float, the image is rotated by a factor drawn randomly from a 
+    angle: float or tuple(float). If float, the image is rotated by a factor drawn randomly from a
         range (-angle, angle). If tuple, the angle is drawn randomly from values specified by the tuple
     """
 
-    def __init__(self, angle=15):
+    def __init__(self, angle=15, dist="cont"):
         self.angle = angle
 
-        if type(self.angle) == tuple:
-            assert len(self.angle) == 2, "Invalid range"
+        if dist == "cont":
+            if type(self.angle) is tuple or type(self.angle) is list:
+                assert len(self.angle) == 2, "Invalid range"
+            else:
+                self.angle = (-self.angle, self.angle)
+            self.dist_func = lambda x : random.uniform(*x)
+        elif dist == "discrete":
+            if type(self.angle) is int or type(self.angle) is float:
+                self.angle = (self.angle,)
+            self.dist_func = random.choice
         else:
-            self.angle = (-self.angle, self.angle)
-
+            raise ValueError("Angle Distribution {} not available ".format(dist))
     def __call__(self, img, bboxes):
 
-        angle = random.uniform(*self.angle)
+        angle = self.dist_func(self.angle)
 
         w, h = img.shape[1], img.shape[0]
         cx, cy = w // 2, h // 2
@@ -632,7 +690,7 @@ class RandomShear(object):
 
 
 def apply_augmentations(img_tensors, bbox_tensors, flip_prob=0.5, scale=0.2, scale_prob=0.5, translate=0.2,
-                        translate_prob=0.5, angle=20.0, rotate_prob=0.5, shear_factor=0.2, shear_prob=0.5):
+                        translate_prob=0.5, angle=20.0, dist="cont", rotate_prob=0.5, shear_factor=0.2, shear_prob=0.5):
     """
     Applies augmentations (horizontal flip, scale, translate, rotate and shear) to image tensors 
     and bounding box tensors and returns agumented image tensors and agumented bounding box tensors.
@@ -660,7 +718,7 @@ def apply_augmentations(img_tensors, bbox_tensors, flip_prob=0.5, scale=0.2, sca
     aug_flip = RandomHorizontalFlip(prob=flip_prob)
     aug_scale = RandomScale(scale=scale)
     aug_translate = RandomTranslate(translate=translate)
-    aug_rotate = RandomRotate(angle=angle)
+    aug_rotate = RandomRotate(angle=angle, dist=dist)
     aug_shear = RandomShear(shear_factor=shear_factor)
 
     # Loop over all the image tensors
@@ -711,3 +769,254 @@ def apply_augmentations(img_tensors, bbox_tensors, flip_prob=0.5, scale=0.2, sca
 
     # Convert np.ndarray to Pytorch tensor
     return torch.from_numpy(a_img_arrays), torch.from_numpy(a_bbox_arrays)
+
+# =====================
+# Model Size Estimator
+# =====================
+
+class SizeEstimator(object):
+    def __init__(self, model, input_size=(1, 1, 32, 32), bits=32):
+        '''
+        Estimates the size of PyTorch models in memory
+        for a given input size
+        '''
+        self.model = model
+        self.input_size = input_size
+        self.bits = 32
+        return
+
+    def get_parameter_sizes(self):
+        '''Get sizes of all parameters in `model`'''
+        mods = list(self.model.modules())
+        sizes = []
+
+        for i in range(1, len(mods)):
+            m = mods[i]
+            p = list(m.parameters())
+            for j in range(len(p)):
+                sizes.append(np.array(p[j].size()))
+
+        self.param_sizes = sizes
+        return
+
+    def get_output_sizes(self):
+        '''Run sample input through each layer to get output sizes'''
+        input_ = Variable(torch.FloatTensor(*self.input_size), volatile=True)
+        mods = list(self.model.modules())
+        out_sizes = []
+        for i in range(1, len(mods)):
+            m = mods[i]
+            out = m(input_)
+            out_sizes.append(np.array(out.size()))
+            input_ = out
+
+        self.out_sizes = out_sizes
+        return
+
+    def calc_param_bits(self):
+        '''Calculate total number of bits to store `model` parameters'''
+        total_bits = 0
+        for i in range(len(self.param_sizes)):
+            s = self.param_sizes[i]
+            bits = np.prod(np.array(s)) * self.bits
+            total_bits += bits
+        self.param_bits = total_bits
+        return
+
+    def calc_forward_backward_bits(self):
+        '''Calculate bits to store forward and backward pass'''
+        total_bits = 0
+        for i in range(len(self.out_sizes)):
+            s = self.out_sizes[i]
+            bits = np.prod(np.array(s)) * self.bits
+            total_bits += bits
+        # multiply by 2 for both forward AND backward
+        self.forward_backward_bits = (total_bits * 2)
+        return
+
+    def calc_input_bits(self):
+        '''Calculate bits to store input'''
+        self.input_bits = np.prod(np.array(self.input_size)) * self.bits
+        return
+
+    def estimate_size(self):
+        '''Estimate model size in memory in megabytes and bits'''
+        self.get_parameter_sizes()
+        self.get_output_sizes()
+        self.calc_param_bits()
+        self.calc_forward_backward_bits()
+        self.calc_input_bits()
+        total = self.param_bits + self.forward_backward_bits + self.input_bits
+
+        total_megabytes = (total / 8) / (1024 ** 2)
+        return total_megabytes, total
+
+# ===============================
+# CYCLIC LEARNING RATE SCHEDULER
+# Ref: https://github.com/pytorch/pytorch/blob/ae0c5a78b217876d25ed92f201be8217ff4a1d4a/torch/optim/lr_scheduler.py
+# Ref commit: https://github.com/pytorch/pytorch/pull/2016/files#diff-d237dd23d765aba7cb30b4c21a5e1a86R544
+# ===============================
+from torch.optim.optimizer import Optimizer
+from torch.optim.lr_scheduler import _LRScheduler
+
+class CyclicLR(_LRScheduler):
+    """Sets the learning rate of each parameter group according to
+    cyclical learning rate policy (CLR). The policy cycles the learning
+    rate between two boundaries with a constant frequency, as detailed in
+    the paper `Cyclical Learning Rates for Training Neural Networks`_.
+    The distance between the two boundaries can be scaled on a per-iteration
+    or per-cycle basis.
+
+    Cyclical learning rate policy changes the learning rate after every batch.
+    `step` should be called after a batch has been used for training.
+    To resume training, save `last_batch_iteration` and use it to instantiate `CycleLR`.
+
+    This class has three built-in policies, as put forth in the paper:
+    "triangular":
+        A basic triangular cycle w/ no amplitude scaling.
+    "triangular2":
+        A basic triangular cycle that scales initial amplitude by half each cycle.
+    "exp_range":
+        A cycle that scales initial amplitude by gamma**(cycle iterations) at each
+        cycle iteration.
+
+    This implementation was adapted from the github repo: `bckenstler/CLR`_
+
+    Args:
+        optimizer (Optimizer): Wrapped optimizer.
+        base_lr (float or list): Initial learning rate which is the
+            lower boundary in the cycle for each param groups.
+            Default: 0.001
+        max_lr (float or list): Upper boundaries in the cycle for
+            each parameter group. Functionally,
+            it defines the cycle amplitude (max_lr - base_lr).
+            The lr at any cycle is the sum of base_lr
+            and some scaling of the amplitude; therefore
+            max_lr may not actually be reached depending on
+            scaling function. Default: 0.006
+        step_size_up (int): Number of training iterations in the
+            increasing half of a cycle.
+        step_size_down (int): Number of training iterations in the
+            decreasing half of a cycle. If step_size_down is None,
+            it is set to step_size_up.
+        mode (str): One of {triangular, triangular2, exp_range}.
+            Values correspond to policies detailed above.
+            If scale_fn is not None, this argument is ignored.
+            Default: 'triangular'
+        gamma (float): Constant in 'exp_range' scaling function:
+            gamma**(cycle iterations)
+            Default: 1.0
+        scale_fn (function): Custom scaling policy defined by a single
+            argument lambda function, where
+            0 <= scale_fn(x) <= 1 for all x >= 0.
+            mode paramater is ignored
+            Default: None
+        scale_mode (str): {'cycle', 'iterations'}.
+            Defines whether scale_fn is evaluated on
+            cycle number or cycle iterations (training
+            iterations since start of cycle).
+            Default: 'cycle'
+        last_batch_idx (int): The index of the last batch. Default: -1
+
+    Example:
+        >>> optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+        >>> scheduler = torch.optim.CyclicLR(optimizer)
+        >>> data_loader = torch.utils.data.DataLoader(...)
+        >>> for epoch in range(10):
+        >>>     for batch in data_loader:
+        >>>         scheduler.step()
+        >>>         train_batch(...)
+
+    .. _Cyclical Learning Rates for Training Neural Networks: https://arxiv.org/abs/1506.01186
+    .. _bckenstler/CLR: https://github.com/bckenstler/CLR
+    """
+
+    def __init__(self,
+                 optimizer,
+                 base_lr=1e-3,
+                 max_lr=6e-3,
+                 step_size_up=2000,
+                 step_size_down=None,
+                 mode='triangular',
+                 gamma=1.,
+                 scale_fn=None,
+                 scale_mode='cycle',
+                 last_batch_idx=-1):
+
+        if not isinstance(optimizer, Optimizer):
+            raise TypeError('{} is not an Optimizer'.format(
+                type(optimizer).__name__))
+        self.optimizer = optimizer
+
+        base_lrs = self._format_lr('base_lr', optimizer, base_lr)
+        if last_batch_idx == -1:
+            for base_lr, group in zip(base_lrs, optimizer.param_groups):
+                group['lr'] = base_lr
+
+        self.max_lrs = self._format_lr('max_lr', optimizer, max_lr)
+
+        step_size_down = step_size_down or step_size_up
+        self.total_size = float(step_size_up + step_size_down)
+        self.step_ratio = float(step_size_up) / self.total_size
+
+        if mode not in ['triangular', 'triangular2', 'exp_range'] \
+                and scale_fn is None:
+            raise ValueError('mode is invalid and scale_fn is None')
+
+        self.mode = mode
+        self.gamma = gamma
+
+        if scale_fn is None:
+            if self.mode == 'triangular':
+                self.scale_fn = self._triangular_scale_fn
+                self.scale_mode = 'cycle'
+            elif self.mode == 'triangular2':
+                self.scale_fn = self._triangular2_scale_fn
+                self.scale_mode = 'cycle'
+            elif self.mode == 'exp_range':
+                self.scale_fn = self._exp_range_scale_fn
+                self.scale_mode = 'iterations'
+        else:
+            self.scale_fn = scale_fn
+            self.scale_mode = scale_mode
+        super(CyclicLR, self).__init__(optimizer, last_batch_idx)
+
+    def _format_lr(self, name, optimizer, lr):
+        """Return correctly formatted lr for each param group."""
+        if isinstance(lr, (list, tuple)):
+            if len(lr) != len(optimizer.param_groups):
+                raise ValueError("expected {} values for {}, got {}".format(
+                    len(optimizer.param_groups), name, len(lr)))
+            return np.array(lr)
+        else:
+            return lr * np.ones(len(optimizer.param_groups))
+
+    def _triangular_scale_fn(self, x):
+        return 1.
+
+    def _triangular2_scale_fn(self, x):
+        return 1 / (2. ** (x - 1))
+
+    def _exp_range_scale_fn(self, x):
+        return self.gamma**(x)
+
+    def get_lr(self):
+        """Calculates the learning rate at batch index. This function treats
+        `self.last_epoch` as the last batch index.
+        """
+        cycle = np.floor(1 + self.last_epoch / self.total_size)
+        x = 1 + self.last_epoch / self.total_size - cycle
+        if x <= self.step_ratio:
+            scale_factor = x / self.step_ratio
+        else:
+            scale_factor = (x - 1) / (self.step_ratio - 1)
+
+        lrs = []
+        for base_lr, max_lr in zip(self.base_lrs, self.max_lrs):
+            base_height = (max_lr - base_lr) * scale_factor
+            if self.scale_mode == 'cycle':
+                lr = base_lr + base_height * self.scale_fn(cycle)
+            else:
+                lr = base_lr + base_height * self.scale_fn(self.last_epoch)
+            lrs.append(lr)
+        return lrs

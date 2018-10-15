@@ -370,15 +370,15 @@ if __name__ == '__main__':
         for step in range(iters_per_epoch):
             data = next(data_iter)
 
-            # # Apply augmentations
-            # aug_img_tensors, aug_bbox_tensors = apply_augmentations(data[0], data[2], flip_prob=0, scale_prob=0,
-            #                                                         translate_prob=0, angle=15.0, shear_factor=0.15)
+            # Apply augmentations
+            aug_img_tensors, aug_bbox_tensors = apply_augmentations(data[0], data[2], flip_prob=0, scale_prob=0,
+                                                                    translate_prob=0, angle=15.0, shear_factor=0.15)
 
-            im_data.data.resize_(data[0].size()).copy_(data[0])
-            #im_data.data.resize_(aug_img_tensors.size()).copy_(aug_img_tensors)
+            #im_data.data.resize_(data[0].size()).copy_(data[0])
+            im_data.data.resize_(aug_img_tensors.size()).copy_(aug_img_tensors)
             im_info.data.resize_(data[1].size()).copy_(data[1])
-            gt_boxes.data.resize_(data[2].size()).copy_(data[2])
-            #gt_boxes.data.resize_(aug_bbox_tensors.size()).copy_(aug_bbox_tensors)
+            #gt_boxes.data.resize_(data[2].size()).copy_(data[2])
+            gt_boxes.data.resize_(aug_bbox_tensors.size()).copy_(aug_bbox_tensors)
             num_boxes.data.resize_(data[3].size()).copy_(data[3])
 
 
@@ -392,8 +392,8 @@ if __name__ == '__main__':
             # if rpn_loss_box.mean().data[0] == np.nan:
             #     bad_augs.append((aug_img_tensors, aug_bbox_tensors))
 
-            loss = 1.5 * rpn_loss_cls.mean() + 2.0 * rpn_loss_box.mean() \
-                   + RCNN_loss_cls.mean() + 2.0 * RCNN_loss_bbox.mean()
+            loss = rpn_loss_cls.mean() + rpn_loss_box.mean() \
+                   + RCNN_loss_cls.mean() + RCNN_loss_bbox.mean()
             loss_temp += loss.data[0]
 
             # Backward pass to compute gradients and update weights

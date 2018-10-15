@@ -9,6 +9,7 @@ from __future__ import absolute_import
 # --------------------------------------------------------
 
 import os
+import sys
 import numpy as np
 import pandas as pd
 import scipy.sparse
@@ -73,7 +74,13 @@ class kaggle_pna(imdb):
         """
         #dcm_dir = "DCMImagesTest" if self.config['mode'] == 'test' else "DCMImagesTrain"
         #print('dcm_dir: ', dcm_dir)
-        image_path = os.path.join(self._data_path, "DCMImagesTrain", pid + self._image_ext)
+        sys.stdout.flush()
+        if self._image_set in ["train", "val", "trainval"]:
+            image_path = os.path.join(self._data_path, "DCMImagesTrain", pid + self._image_ext)
+        if self._image_set == "test":
+            image_path = os.path.join(self._data_path, "DCMImagesTest", pid + self._image_ext)
+
+        #image_path = os.path.join(self._data_path, "DCMImagesTrain", pid + self._image_ext)
         assert os.path.exists(image_path), 'Path does not exist: {}'.format(image_path)
         return image_path
 
