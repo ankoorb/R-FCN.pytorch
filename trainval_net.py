@@ -159,6 +159,7 @@ if __name__ == '__main__':
         from model.rfcn.resnet_atrous import resnet
     elif args.arch == 'couplenet':
         from model.couplenet.resnet_atrous import resnet
+        from model.couplenet.inception import inceptionV3
     elif args.arch == 'chexnet':
         from model.chexnet.densenet import chexnet
 
@@ -289,6 +290,8 @@ if __name__ == '__main__':
         model = resnet(imdb.classes, 152, pretrained=True, class_agnostic=args.class_agnostic)
     elif args.net == 'chex121':
         model = chexnet(imdb.classes, 121, pretrained=True, class_agnostic=args.class_agnostic)
+    elif args.net == 'inception':
+        model = inceptionV3(imdb.classes, pretrained=True, class_agnostic=args.class_agnostic)
     else:
         print("network is not defined")
         pdb.set_trace()
