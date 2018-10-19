@@ -70,6 +70,7 @@ def train(dataset="kaggle_pna", train_ds ="train", arch="couplenet", net="res152
         from model.rfcn.resnet_atrous import resnet
     elif arch == 'couplenet':
         from model.couplenet.resnet_atrous import resnet
+        from model.couplenet.inception import inceptionV3
 
     from roi_data_layer.pnaRoiBatchLoader import roibatchLoader
     from roi_data_layer.pna_roidb import combined_roidb
@@ -194,6 +195,8 @@ def train(dataset="kaggle_pna", train_ds ="train", arch="couplenet", net="res152
         model = resnet(imdb.classes, 101, pretrained=True, class_agnostic=class_agnostic)
     elif net == 'res152':
         model = resnet(imdb.classes, 152, pretrained=True, class_agnostic=class_agnostic)
+    elif net == 'inception':
+        model = inceptionV3(imdb.classes, pretrained=True, class_agnostic=class_agnostic)
     else:
         print("network is not defined")
         pdb.set_trace()
